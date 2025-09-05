@@ -7,6 +7,17 @@ from telegram.ext import Updater, CommandHandler, CallbackContext
 from dotenv import load_dotenv
 import claim_manager
 
+
+import logging
+
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -70,3 +81,24 @@ if __name__ == "__main__":
 
     updater.start_polling()
     updater.idle()
+
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+if not TOKEN:
+    logger.error("TELEGRAM_BOT_TOKEN not set in environment variables!")
+    exit(1)
+
+logger.info("Starting Telegram bot...")
+
+updater = Updater(TOKEN, use_context=True)
+dispatcher = updater.dispatcher
+
+# Example command handler
+def start(update, context):
+    update.message.reply_text("Pancono Wallet Bot is running!")
+
+dispatcher.add_handler(CommandHandler("start", start))
+
+# Start the bot
+updater.start_polling()
+logger.info("Bot started successfully and polling for messages...")
+updater.idle()
