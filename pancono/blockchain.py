@@ -22,3 +22,4 @@ def send(sender, recipient, amount):
     wallets[sender]["balance"] -= amount
     wallets[recipient]["balance"] += amount
     return {"from": sender, "to": recipient, "amount": amount}
+
