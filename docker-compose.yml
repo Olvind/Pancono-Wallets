@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  rpc:
+    build: .
+    container_name: pancono_rpc
+    command: python rpc_server.py
+    ports:
+      - "8332:8332"
+    restart: unless-stopped
+
+  bot:
+    build: .
+    container_name: pancono_bot
+    command: python bot.py
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      - rpc
+    restart: unless-stopped
