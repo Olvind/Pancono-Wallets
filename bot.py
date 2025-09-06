@@ -1,55 +1,72 @@
+import os
 import requests
-from telegram.ext import Updater, CommandHandler
+import threading
+import time
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+from dotenv import load_dotenv
+import claim_manager
 
-RPC_URL = "http://127.0.0.1:8332"
-API_KEY = "supersecret123"  # must match rpc_server.py
+load_dotenv()
 
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+RPC_URL = f"http://{os.getenv('RPC_HOST')}:{os.getenv('RPC_PORT')}"
+
+# JSON-RPC helper
 def rpc_call(method, params=[]):
-    headers = {"X-API-KEY": API_KEY}
     payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    response = requests.post(RPC_URL, json=payload, headers=headers).json()
-    if "error" in response and response["error"]:
-        return f"❌ Error: {response['error']}"
-    return response["result"]
+    r = requests.post(RPC_URL, json=payload)
+    return r.json().get("result")
 
-def start(update, context):
-    update.message.reply_text("🚀 Welcome to Pancono Wallet Bot!\n\nCommands:\n/createwallet\n/balance <address>\n/send <from> <to> <amount>\n/mine")
+# Commands
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("🚀 Welcome to Pancono Wallet Bot!\nUse /createwallet to get started.")
 
-def create_wallet(update, context):
-    result = rpc_call("getnewaddress")
-    update.message.reply_text(f"🆕 Wallet created:\nAddress: {result['address']}\nPrivate Key: {result['private_key']}")
+def createwallet(update: Update, context: CallbackContext):
+    wallet = rpc_call("createwallet")
+    update.message.reply_text(f"✅ Wallet created!\nAddress: {wallet['address']}\nPrivate Key: {wallet['private_key']}")
 
-def balance(update, context):
+def balance(update: Update, context: CallbackContext):
     if len(context.args) == 0:
         update.message.reply_text("Usage: /balance <address>")
         return
-    result = rpc_call("getbalance", [context.args[0]])
-    update.message.reply_text(f"💰 Balance: {result} PANCA")
+    bal = rpc_call("getbalance", [context.args[0]])
+    update.message.reply_text(f"💰 Balance: {bal} PANCA")
 
-def send(update, context):
+def send(update: Update, context: CallbackContext):
     if len(context.args) != 3:
-        update.message.reply_text("Usage: /send <from_addr> <to_addr> <amount>")
+        update.message.reply_text("Usage: /send <from_address> <to_address> <amount>")
         return
-    from_addr, to_addr, amount = context.args
-    result = rpc_call("sendtoaddress", [from_addr, to_addr, float(amount)])
-    update.message.reply_text(f"✅ Transaction sent:\n{result}")
+    try:
+        tx = rpc_call("send", [context.args[0], context.args[1], float(context.args[2])])
+        update.message.reply_text(f"✅ Sent {tx['amount']} PANCA from {tx['from']} → {tx['to']}")
+    except Exception as e:
+        update.message.reply_text(f"❌ Error: {e}")
 
-def mine(update, context):
-    result = rpc_call("generate")
-    update.message.reply_text(f"⛏️ New block mined: {result}")
+def startclaim(update: Update, context: CallbackContext):
+    if len(context.args) == 0:
+        update.message.reply_text("Usage: /startclaim <address>")
+        return
+    msg = claim_manager.start_claim(update.effective_user.id, context.args[0])
+    update.message.reply_text(msg)
 
-def main():
-    updater = Updater("YOUR_TELEGRAM_BOT_TOKEN", use_context=True)
+# Background thread for auto-claim
+def run_claim_checker():
+    while True:
+        claim_manager.check_claims()
+        time.sleep(3600)  # check hourly
+
+if __name__ == "__main__":
+    updater = Updater(TOKEN)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("createwallet", create_wallet))
+    dp.add_handler(CommandHandler("createwallet", createwallet))
     dp.add_handler(CommandHandler("balance", balance))
     dp.add_handler(CommandHandler("send", send))
-    dp.add_handler(CommandHandler("mine", mine))
+    dp.add_handler(CommandHandler("startclaim", startclaim))
+
+    threading.Thread(target=run_claim_checker, daemon=True).start()
 
     updater.start_polling()
     updater.idle()
-
-if __name__ == "__main__":
-    main()
