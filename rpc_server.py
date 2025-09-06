@@ -1,61 +1,28 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import json
-from pancono.blockchain import Blockchain, Wallet  # import your repo classes
+from flask import Flask, request, jsonify
+from pancono import blockchain
 
-blockchain = Blockchain()
+app = Flask(__name__)
 
-API_KEY = "supersecret123"  # 🔐 RPC Authentication Key
+@app.route("/", methods=["POST"])
+def rpc():
+    data = request.get_json()
+    method = data.get("method")
+    params = data.get("params", [])
+    response = {"jsonrpc": "2.0", "id": data.get("id", 1)}
 
-class RPCHandler(BaseHTTPRequestHandler):
-    def _send_response(self, result=None, error=None, id=None):
-        response = {
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": result,
-            "error": error
-        }
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(response).encode())
+    try:
+        if method == "getbalance":
+            response["result"] = blockchain.get_balance(params[0])
+        elif method == "send":
+            response["result"] = blockchain.send(params[0], params[1], params[2])
+        elif method == "createwallet":
+            response["result"] = blockchain.create_wallet()
+        else:
+            response["error"] = "Unknown method"
+    except Exception as e:
+        response["error"] = str(e)
 
-    def do_POST(self):
-        # 🔐 API Key Auth
-        if self.headers.get("X-API-KEY") != API_KEY:
-            self._send_response(error="Unauthorized", id=None)
-            return
-
-        content_length = int(self.headers['Content-Length'])
-        body = self.rfile.read(content_length)
-        req = json.loads(body)
-
-        method = req.get("method")
-        params = req.get("params", [])
-        req_id = req.get("id")
-
-        try:
-            if method == "getnewaddress":
-                wallet = Wallet()
-                result = {"address": wallet.get_address(), "private_key": wallet.private_key}
-            elif method == "getbalance":
-                address = params[0]
-                result = blockchain.get_balance(address)
-            elif method == "sendtoaddress":
-                from_addr, to_addr, amount = params
-                tx = blockchain.create_transaction(from_addr, to_addr, amount)
-                result = tx.to_dict()
-            elif method == "generate":
-                result = blockchain.mine_block()
-            else:
-                raise Exception(f"Unknown method: {method}")
-
-            self._send_response(result=result, id=req_id)
-
-        except Exception as e:
-            self._send_response(error=str(e), id=req_id)
-
+    return jsonify(response)
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", 8332), RPCHandler)
-    print("🚀 Pancono RPC Server running at http://127.0.0.1:8332")
-    server.serve_forever()
+    app.run(host="0.0.0.0", port=8332)
