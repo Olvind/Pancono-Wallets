@@ -4,6 +4,8 @@ from pancono.blockchain import Blockchain, Wallet  # import your repo classes
 
 blockchain = Blockchain()
 
+API_KEY = "supersecret123"  # 🔐 RPC Authentication Key
+
 class RPCHandler(BaseHTTPRequestHandler):
     def _send_response(self, result=None, error=None, id=None):
         response = {
@@ -18,6 +20,11 @@ class RPCHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response).encode())
 
     def do_POST(self):
+        # 🔐 API Key Auth
+        if self.headers.get("X-API-KEY") != API_KEY:
+            self._send_response(error="Unauthorized", id=None)
+            return
+
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
         req = json.loads(body)
@@ -29,8 +36,7 @@ class RPCHandler(BaseHTTPRequestHandler):
         try:
             if method == "getnewaddress":
                 wallet = Wallet()
-                address = wallet.get_address()
-                result = {"address": address, "private_key": wallet.private_key}
+                result = {"address": wallet.get_address(), "private_key": wallet.private_key}
             elif method == "getbalance":
                 address = params[0]
                 result = blockchain.get_balance(address)
